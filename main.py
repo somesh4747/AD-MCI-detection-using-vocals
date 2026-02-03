@@ -2,9 +2,13 @@ import torch
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 import warnings
+import librosa
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
+# wav, sr = librosa.load("E:/ML/pauses/load_dir/new.wav", sr=16000)
+# wav = torch.from_numpy(wav).float()
 
 model = load_silero_vad()
 wav = read_audio("E:/ML/pauses/load_dir/new.wav", sampling_rate=16000)
