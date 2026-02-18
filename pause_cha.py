@@ -96,7 +96,7 @@ def get_segments_as_list(segments):
 
 # Example usage
 if __name__ == '__main__':
-    file_path = r"E:\ML\silero-python\dematia_bank\Baycrest2103.cha"
+    file_path = r"E:\ML\silero-python\Delaware\MCI\01-1.cha"
     
     # Get all patient voice segments
     segments = get_patient_voice_segments(file_path)

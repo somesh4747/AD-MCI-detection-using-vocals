@@ -4,12 +4,13 @@ import pandas as pd
 def get_patient_word_segments(file_path):
     """
     Extract all patient (PAR) words with their individual timings from a .cha file.
-    Returns a list of word segments that can be used to chop/extract audio word by word.
-    Parses the file directly to extract %wor timing lines.
+    Returns a list of word segments with PAR utterance tracking.
+    Also extracts silence information within each PAR line.
     """
     word_segments = []
     word_count = 0
     par_count = 0
+    par_data = []  # Track data per PAR utterance
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -24,11 +25,15 @@ def get_patient_word_segments(file_path):
             # Look for patient utterance lines
             if line.startswith("*PAR:"):
                 par_count += 1
-                print(f"\nFound PAR utterance #{par_count} at line {i}: {line[:50]}")
+                par_content = line.replace("*PAR:", "").strip()
+                print(
+                    f"\nFound PAR utterance #{par_count} at line {i}: {par_content[:50]}"
+                )
 
                 # Look ahead for the %wor: line (may be after %mor: and %gra: lines)
                 j = i + 1
                 found_wor = False
+                par_words = []
 
                 while j < len(lines) and j < i + 10:  # Look within next 10 lines
                     next_line = lines[j].rstrip("\n")
@@ -65,17 +70,18 @@ def get_patient_word_segments(file_path):
 
                                         word_count += 1
 
-                                        word_segments.append(
-                                            {
-                                                "word_num": word_count,
-                                                "word": word,
-                                                "start_ms": start_ms,
-                                                "end_ms": end_ms,
-                                                "start_sec": round(start_sec, 3),
-                                                "end_sec": round(end_sec, 3),
-                                                "duration_sec": round(duration_sec, 3),
-                                            }
-                                        )
+                                        word_segment = {
+                                            "word_num": word_count,
+                                            "word": word,
+                                            "start_ms": start_ms,
+                                            "end_ms": end_ms,
+                                            "start_sec": round(start_sec, 3),
+                                            "end_sec": round(end_sec, 3),
+                                            "duration_sec": round(duration_sec, 3),
+                                            "par_num": par_count,
+                                        }
+                                        word_segments.append(word_segment)
+                                        par_words.append(word_segment)
 
                                         k += 2
                                     except ValueError as e:
@@ -87,6 +93,18 @@ def get_patient_word_segments(file_path):
                                     k += 1
                             else:
                                 k += 1
+
+                        # Calculate silences within this PAR line
+                        if par_words:
+                            par_data.append(
+                                {
+                                    "par_num": par_count,
+                                    "par_text": par_content,
+                                    "words": par_words,
+                                    "total_duration": par_words[-1]["end_sec"]
+                                    - par_words[0]["start_sec"],
+                                }
+                            )
 
                         break
                     elif next_line.startswith("*"):
@@ -110,7 +128,7 @@ def get_patient_word_segments(file_path):
 
         traceback.print_exc()
 
-    return word_segments
+    return word_segments, par_data
 
 
 def print_word_segments(segments):
@@ -151,17 +169,18 @@ def save_word_segments(segments, output_file):
     print(f"\nWord segments saved to: {output_file}")
 
     # Also create a script-friendly format for FFmpeg
-    script_file = output_file.replace(".csv", "_ffmpeg_commands.txt")
-    with open(script_file, "w") as f:
-        f.write("# FFmpeg commands to extract patient voice segments - WORD BY WORD\n")
-        f.write("# Usage: ffmpeg -i input.mp3 -ss START -to END -c copy output.mp3\n\n")
+    # script_file = output_file.replace(".csv", "_ffmpeg_commands.txt")
 
-        for seg in segments:
-            f.write(f"# Word {seg['word_num']}: {seg['word']}\n")
-            f.write(f"ffmpeg -i input.mp3 -ss {seg['start_sec']} -to {seg['end_sec']} ")
-            f.write(f"-c copy word_{seg['word_num']:04d}_{seg['word']}.mp3\n\n")
+    # with open(script_file, "w") as f:
+    #     f.write("# FFmpeg commands to extract patient voice segments - WORD BY WORD\n")
+    #     f.write("# Usage: ffmpeg -i input.mp3 -ss START -to END -c copy output.mp3\n\n")
 
-    print(f"FFmpeg commands saved to: {script_file}")
+    #     for seg in segments:
+    #         f.write(f"# Word {seg['word_num']}: {seg['word']}\n")
+    #         f.write(f"ffmpeg -i input.mp3 -ss {seg['start_sec']} -to {seg['end_sec']} ")
+    #         f.write(f"-c copy word_{seg['word_num']:04d}_{seg['word']}.mp3\n\n")
+
+    # print(f"FFmpeg commands saved to: {script_file}")
 
 
 def get_word_segments_as_list(segments):
@@ -169,74 +188,152 @@ def get_word_segments_as_list(segments):
     return [(seg["word"], seg["start_sec"], seg["end_sec"]) for seg in segments]
 
 
-def create_silence_map(segments, total_duration=None):
+def create_silence_map(segments, par_data):
     """
-    Create a map of silence (gaps) between words.
-    Useful for identifying pauses within speech.
+    Create a map of silence (gaps) WITHIN each PAR utterance.
+    Only counts silences between words in the same PAR line, not between PAR lines.
+
+    Returns:
+        - silences: List of silence gaps within each PAR line
+        - par_silence_summary: Summary of total silence per PAR utterance
     """
-    if not segments:
-        return []
+    if not par_data:
+        return [], []
 
     silences = []
-    for i in range(len(segments) - 1):
-        current_end = segments[i]["end_sec"]
-        next_start = segments[i + 1]["start_sec"]
+    par_silence_summary = []
 
-        silence_duration = next_start - current_end
+    for par in par_data:
+        par_num = par["par_num"]
+        words = par["words"]
+        par_total_silence = 0
 
-        if silence_duration > 0:  # Only if there's a gap
-            silences.append(
-                {
-                    "between_word": f"{segments[i]['word']} -> {segments[i + 1]['word']}",
-                    "silence_start": round(current_end, 3),
-                    "silence_end": round(next_start, 3),
-                    "silence_duration_sec": round(silence_duration, 3),
-                }
-            )
+        # Calculate silences between consecutive words WITHIN this PAR line
+        for i in range(len(words) - 1):
+            current_end = words[i]["end_sec"]
+            next_start = words[i + 1]["start_sec"]
 
-    return silences
+            silence_duration = next_start - current_end
+
+            if silence_duration > 0:  # Only if there's a gap
+                silences.append(
+                    {
+                        "par_num": par_num,
+                        "par_text": par["par_text"][:50],  # First 50 chars
+                        "between_word": f"{words[i]['word']} -> {words[i + 1]['word']}",
+                        "silence_start": round(current_end, 3),
+                        "silence_end": round(next_start, 3),
+                        "silence_duration_sec": round(silence_duration, 3)
+                    }
+                )
+                par_total_silence += silence_duration
+
+        # Calculate PAR-level statistics
+        par_total_duration = par["total_duration"]
+        par_speech_duration = par_total_duration - par_total_silence
+
+        par_silence_summary.append(
+            {
+                "par_num": par_num,
+                "par_text": par["par_text"][:100],
+                "total_duration_sec": round(par_total_duration, 3),
+                "total_silence_sec": round(par_total_silence, 3),
+                "total_speech_sec": round(par_speech_duration, 3),
+                "silence_percentage": round(
+                    (
+                        (par_total_silence / par_total_duration * 100)
+                        if par_total_duration > 0
+                        else 0
+                    ),
+                    2,
+                ),
+                "num_words": len(words),
+                "num_silences": len(words) - 1,  # n-1 gaps for n words
+            }
+        )
+
+    return silences, par_silence_summary
 
 
 # Example usage
-if __name__ == "__main__":
-    file_path = r"E:\ML\silero-python\dematia_bank\Baycrest2103.cha"
 
-    # Get all patient word segments
-    word_segments = get_patient_word_segments(file_path)
+
+def get_report(file_path):
+    # file_path = r"E:\ML\silero-python\Delaware\MCI\01-1.cha"
+
+    # Get all patient word segments and PAR data
+    word_segments, par_data = get_patient_word_segments(file_path)
 
     if word_segments:
         # Print analysis
-        print_word_segments(word_segments)
+        # print_word_segments(word_segments)
 
+        # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         # Save to CSV and FFmpeg commands
         output_csv = r"E:\ML\silero-python\patient_word_segments.csv"
-        save_word_segments(word_segments, output_csv)
+        # save_word_segments(word_segments, output_csv)
+        # =============================================================
 
         # Get as simple list for programmatic use
         word_list = get_word_segments_as_list(word_segments)
-        print(f"\nWord List Format (for chopping):")
-        print(f"{'Word':<20} {'Start (s)':<15} {'End (s)':<15}")
-        print("-" * 50)
-        for word, start, end in word_list[:10]:  # Show first 10 words
-            print(f"{word:<20} {start:<15} {end:<15}")
-        if len(word_list) > 10:
-            print(f"... and {len(word_list) - 10} more words")
+        
 
-        # Create silence map
-        silences = create_silence_map(word_segments)
-        if silences:
-            print(f"\n\nSILENCES BETWEEN WORDS (Total: {len(silences)}):")
-            print("-" * 80)
-            silence_df = pd.DataFrame(silences)
-            silence_csv = output_csv.replace(".csv", "_silences.csv")
-            silence_df.to_csv(silence_csv, index=False)
-            print(f"Silence map saved to: {silence_csv}")
+        # Create silence map (WITHIN each PAR line only)
+        silences, par_silence_summary = create_silence_map(word_segments, par_data)
 
-            # Show top silences
-            silence_df_sorted = silence_df.sort_values(
-                "silence_duration_sec", ascending=False
+        if par_silence_summary:
+            # print(f"\n\n{'='*120}")
+            # print(
+            #     "SILENCE ANALYSIS - BY PAR UTTERANCE (Only silences WITHIN each PAR line)"
+            # )
+            # print(f"{'='*120}")
+
+            # Save PAR-level silence summary
+            silence_summary_df = pd.DataFrame(par_silence_summary)
+            silence_summary_csv = output_csv.replace(".csv", "_par_silence_summary.csv")
+            silence_summary_df.to_csv(silence_summary_csv, index=False)
+            print(f"\nPAR-level silence summary saved to: {silence_summary_csv}")
+
+            print(f"\nTop 10 PAR Utterances by Total Silence:")
+            print(
+                silence_summary_df.sort_values("total_silence_sec", ascending=False)
+                .head(10)
+                .to_string(index=False)
             )
-            print(f"\nTop 10 Longest Silences:")
-            print(silence_df_sorted.head(10).to_string(index=False))
+
+            total_overall_silence = silence_summary_df["total_silence_sec"].sum()
+            total_overall_speech = silence_summary_df["total_speech_sec"].sum()
+            total_overall_duration = silence_summary_df["total_duration_sec"].sum()
+            total_par_count = len(par_silence_summary)
+
+            
+
+            # Save detailed silence map
+            if silences:
+                silence_df = pd.DataFrame(silences)
+                silence_csv = output_csv.replace(".csv", "_silences_detailed.csv")
+                silence_df.to_csv(silence_csv, index=False)
+                print(f"\nDetailed silence map saved to: {silence_csv}")
+
+                print(f"\nTop 10 Longest Individual Silences:")
+                silence_df_sorted = silence_df.sort_values(
+                    "silence_duration_sec", ascending=False
+                )
+                print(
+                    silence_df_sorted.head(10)[
+                        ["par_num", "between_word", "silence_duration_sec"]
+                    ].to_string(index=False)
+                )
+            
+            # ====== returning the silence summary =======
+            return silences, par_silence_summary, word_segments
+        else:
+            print("No PAR utterances with silence found!")
+            return [], [], []
     else:
         print("No patient word segments found!")
+        return [], [], []
+
+
+if __name__ == "__main__":
+    get_report(r"E:\ML\silero-python\Delaware\MCI\01-1.cha")

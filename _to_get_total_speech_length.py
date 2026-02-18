@@ -76,17 +76,19 @@ def save_segments_for_chopping(segments, output_file):
     print(f"\nSegments saved to: {output_file}")
     
     # Also create a script-friendly format
-    script_file = output_file.replace('.csv', '_ffmpeg_commands.txt')
-    with open(script_file, 'w') as f:
-        f.write("# FFmpeg commands to extract patient voice segments\n")
-        f.write("# Usage: ffmpeg -i input.mp3 -ss START -to END -c copy output.mp3\n\n")
+
+
+    # script_file = output_file.replace('.csv', '_ffmpeg_commands.txt')
+    # with open(script_file, 'w') as f:
+    #     f.write("# FFmpeg commands to extract patient voice segments\n")
+    #     f.write("# Usage: ffmpeg -i input.mp3 -ss START -to END -c copy output.mp3\n\n")
         
-        for seg in segments:
-            f.write(f"# Segment {seg['segment_num']}\n")
-            f.write(f"ffmpeg -i input.mp3 -ss {seg['start_sec']} -to {seg['end_sec']} ")
-            f.write(f"-c copy patient_segment_{seg['segment_num']}.mp3\n\n")
+    #     for seg in segments:
+    #         f.write(f"# Segment {seg['segment_num']}\n")
+    #         f.write(f"ffmpeg -i input.mp3 -ss {seg['start_sec']} -to {seg['end_sec']} ")
+    #         f.write(f"-c copy patient_segment_{seg['segment_num']}.mp3\n\n")
     
-    print(f"FFmpeg commands saved to: {script_file}")
+    # print(f"FFmpeg commands saved to: {script_file}")
 
 
 def get_segments_as_list(segments):
@@ -96,7 +98,7 @@ def get_segments_as_list(segments):
 
 # Example usage
 if __name__ == '__main__':
-    file_path = r"E:\ML\silero-python\dematia_bank\Baycrest2103.cha"
+    file_path = r"E:\ML\silero-python\Delaware\MCI\01-1.cha"
     
     # Get all patient voice segments
     segments = get_patient_voice_segments(file_path)
@@ -105,11 +107,11 @@ if __name__ == '__main__':
     print_patient_segments(segments)
     
     # Save to CSV and FFmpeg commands
-    output_csv = r"E:\ML\silero-python\patient_segments.csv"
+    output_csv = r"E:\ML\silero-python\patient_segments_testing_MF.csv"
     save_segments_for_chopping(segments, output_csv)
     
     # Get as simple list for programmatic use
-    segment_list = get_segments_as_list(segments)
-    print(f"\nSegment List Format (for chopping):")
-    for i, (start, end) in enumerate(segment_list, 1):
-        print(f"  Segment {i}: ({start}s, {end}s)")
+    # segment_list = get_segments_as_list(segments)
+    # print(f"\nSegment List Format (for chopping):")
+    # for i, (start, end) in enumerate(segment_list, 1):
+    #     print(f"  Segment {i}: ({start}s, {end}s)")
