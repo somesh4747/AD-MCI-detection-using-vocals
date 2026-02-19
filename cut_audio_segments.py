@@ -135,7 +135,7 @@ if __name__ == '__main__':
     csv_file = r"E:\ML\silero-python\patient_segments.csv"
     
     # Leave audio_file as None to auto-detect, or provide the path:
-    audio_file = r"E:\ML\silero-python\dematia_bank\Baycrest2103.mp3"  # Will search in dementia_audio directory
+    audio_file = r"E:\ML\silero-python\demantia_bank\Baycrest2103.mp3"  # Will search in dementia_audio directory
     
     output_dir = r"E:\ML\silero-python\patient_audio_segments"
     

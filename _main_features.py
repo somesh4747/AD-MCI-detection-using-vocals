@@ -34,30 +34,38 @@ def extract_features_from_patient(cha_file):
     total_pause_times = [i['total_silence_sec'] for i in get_silence_summary]
     # word_segments = [w['word_segment'] for w in silences]
     no_of_silences = [w['num_silences'] for w in get_silence_summary]
-    # Calculate comprehensive features
+    # Calculate features - OPTIMIZED (removed weak/redundant features)
+    # Analysis shows only these features effectively discriminate Control vs MCI:
     
     features = {
-        # Pause/Silence features
-        'mean_pause_duration': round(sum(silences_durations) / sum(no_of_silences), 4) if silences_durations else 0,
-        'std_pause_duration': round(pd.Series(silences_durations).std(), 4),
-        'median_pause_duration': round(pd.Series(silences_durations).median(), 4),
-        'max_pause_duration': round(max(silences_durations), 4) if silences_durations else 0,
-        'min_pause_duration': round(min(silences_durations), 4) if silences_durations else 0,
-        
-        'total_pause_time': round(sum(total_pause_times), 4),
-        'total_speech_time': round(sum(total_duration), 4),
+        # Key pause patterns (Cohen's d = 0.572)
         'pause_count': sum(no_of_silences),
-        'word_count': len(word_segments),
-        # Speech rate features
-
+        
+        # Speech timing (Cohen's d = 0.513)
+        'total_speech_time': round(sum(total_duration), 4),
+        
+        # Pause timing (Cohen's d = 0.316)
+        'total_pause_time': round(sum(total_pause_times), 4),
+        
+        # Speech rate components (Cohen's d = 0.310)
         'mean_word_duration': round(sum(total_speech_times) / len(word_segments), 4) if word_segments else 0,
-        'std_word_duration': round(pd.Series(total_speech_times).std(), 4),
+        
+        # Speech rate metric (Cohen's d = 0.304)
         'speech_rate_wpm': round((len(word_segments) / sum(total_speech_times)) * 60, 2) if sum(total_speech_times) > 0 else 0,
         
-        # Pause frequency
+        # Pause frequency ratio (Cohen's d = 0.289)
         'pause_per_word_ratio': round(len(silences) / len(word_segments), 4) if word_segments else 0,
-        'pause_variability': round(pd.Series(silences_durations).var(), 4),
     }
+    
+    # REMOVED FEATURES (too weak, not discriminative):
+    # ❌ word_count (redundant with pause_count, r=0.999)
+    # ❌ median_pause_duration (d=0.032 - useless)
+    # ❌ std_word_duration (d=0.088 - too weak)
+    # ❌ min_pause_duration (d=0.102 - too weak)
+    # ❌ max_pause_duration (d=0.140 - too weak)
+    # ❌ mean_pause_duration (d=0.205 - too weak)
+    # ❌ pause_variability (d=0.209 - too weak)
+    # ❌ std_pause_duration (d=0.235 - too weak)
     
     return features
 
@@ -130,14 +138,14 @@ def create_training_dataset(patients_dir, output_csv, label_file):
 # Example usage
 if __name__ == '__main__':
     # Directory with patient .cha files
-    patients_dir = r"E:\ML\silero-python\dementia_audio\Baycrest"
+    patients_dir = r"E:\ML\silero-python\Delaware\Control"
     
     # CSV file with patient diagnoses (you need to create this)
     # Format: patient_id, diagnosis (0=Control, 1=MCI, 2=AD)
-    label_file = r"E:\ML\silero-python\Baycrest.csv"
+    label_file = r"E:\ML\silero-python\_Control.csv"
     
     # Output training CSV
-    output_csv = r"E:\ML\silero-python\training_dataset_Bracrest.csv"
+    output_csv = r"E:\ML\silero-python\training_dataset___Control.csv"
     
     # Create training dataset
     df = create_training_dataset(patients_dir, output_csv, label_file)
