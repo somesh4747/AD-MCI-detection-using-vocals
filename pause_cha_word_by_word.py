@@ -258,6 +258,217 @@ def create_silence_map(segments, par_data):
 # Example usage
 
 
+def get_response_time(file_path):
+    """
+    Extract response time between INV (investigator) and PAR (patient) utterances.
+    Only calculate response time when a PAR's IMMEDIATELY PRECEDING utterance is an INV.
+    If consecutive PARs follow, only the first PAR (right after INV) gets a response time.
+    If consecutive INVs appear, only the LAST INV (right before PAR) is used.
+    Response time = PAR start time - INV end time
+    
+    Returns:
+        - response_times: List of response time data
+        - inv_par_pairs: Raw data of INV-PAR pairs (ONE pair per INV)
+    """
+    response_times = []
+    inv_par_pairs = []
+    
+    utterances_list = []  # Store all utterances in file order
+    
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        i = 0
+        inv_count = 0
+        par_count = 0
+        
+        while i < len(lines):
+            line = lines[i].rstrip("\n")
+            
+            # ===== EXTRACT INV UTTERANCES =====
+            if line.startswith("*INV:"):
+                inv_count += 1
+                inv_content = line.replace("*INV:", "").strip()
+                
+                # Look for %wor: line
+                j = i + 1
+                inv_words = []
+                
+                while j < len(lines) and j < i + 10:
+                    next_line = lines[j].rstrip("\n")
+                    
+                    if next_line.startswith("%wor:"):
+                        wor_content = next_line.replace("%wor:", "").strip()
+                        parts = wor_content.split()
+                        
+                        # Parse words and timings
+                        k = 0
+                        while k < len(parts):
+                            word = parts[k]
+                            
+                            if k + 1 < len(parts):
+                                timing_raw = parts[k + 1]
+                                timing = timing_raw.replace("\x15", "").strip()
+                                
+                                if "_" in timing:
+                                    try:
+                                        start_ms, end_ms = map(float, timing.split("_"))
+                                        inv_words.append({
+                                            "word": word,
+                                            "start_ms": start_ms,
+                                            "end_ms": end_ms,
+                                            "start_sec": start_ms / 1000.0,
+                                            "end_sec": end_ms / 1000.0
+                                        })
+                                        k += 2
+                                    except ValueError:
+                                        k += 1
+                                else:
+                                    k += 1
+                            else:
+                                k += 1
+                        break
+                    elif next_line.startswith("*"):
+                        break
+                    else:
+                        j += 1
+                
+                if inv_words:
+                    utterances_list.append({
+                        "type": "INV",
+                        "inv_num": inv_count,
+                        "inv_text": inv_content,
+                        "words": inv_words,
+                        "start_sec": inv_words[0]["start_sec"],
+                        "end_sec": inv_words[-1]["end_sec"]
+                    })
+            
+            # ===== EXTRACT PAR UTTERANCES =====
+            elif line.startswith("*PAR:"):
+                par_count += 1
+                par_content = line.replace("*PAR:", "").strip()
+                
+                # Look for %wor: line
+                j = i + 1
+                par_words = []
+                
+                while j < len(lines) and j < i + 10:
+                    next_line = lines[j].rstrip("\n")
+                    
+                    if next_line.startswith("%wor:"):
+                        wor_content = next_line.replace("%wor:", "").strip()
+                        parts = wor_content.split()
+                        
+                        # Parse words and timings
+                        k = 0
+                        while k < len(parts):
+                            word = parts[k]
+                            
+                            if k + 1 < len(parts):
+                                timing_raw = parts[k + 1]
+                                timing = timing_raw.replace("\x15", "").strip()
+                                
+                                if "_" in timing:
+                                    try:
+                                        start_ms, end_ms = map(float, timing.split("_"))
+                                        par_words.append({
+                                            "word": word,
+                                            "start_ms": start_ms,
+                                            "end_ms": end_ms,
+                                            "start_sec": start_ms / 1000.0,
+                                            "end_sec": end_ms / 1000.0
+                                        })
+                                        k += 2
+                                    except ValueError:
+                                        k += 1
+                                else:
+                                    k += 1
+                            else:
+                                k += 1
+                        break
+                    elif next_line.startswith("*"):
+                        break
+                    else:
+                        j += 1
+                
+                if par_words:
+                    utterances_list.append({
+                        "type": "PAR",
+                        "par_num": par_count,
+                        "par_text": par_content,
+                        "words": par_words,
+                        "start_sec": par_words[0]["start_sec"],
+                        "end_sec": par_words[-1]["end_sec"]
+                    })
+            
+            i += 1
+        
+        # Only create a response time when a PAR's IMMEDIATELY PRECEDING utterance is an INV.
+        # If multiple consecutive INVs appear before a PAR, use the LAST INV (the one right before PAR).
+        # If a PAR follows another PAR, skip it - no response time entry.
+        for i, utterance in enumerate(utterances_list):
+            if utterance["type"] == "PAR" and i > 0:
+                # Check if the IMMEDIATELY preceding utterance is an INV
+                prev = utterances_list[i - 1]
+                if prev["type"] == "INV":
+                    response_time_sec = utterance["start_sec"] - prev["end_sec"]
+                    
+                    inv_par_pairs.append({
+                        "inv_num": prev["inv_num"],
+                        "par_num": utterance["par_num"],
+                        "inv_text": prev["inv_text"][:50],
+                        "par_text": utterance["par_text"][:50],
+                        "inv_end_sec": round(prev["end_sec"], 3),
+                        "par_start_sec": round(utterance["start_sec"], 3),
+                        "response_time_sec": round(response_time_sec, 3),
+                        "inv_duration_sec": round(prev["end_sec"] - prev["start_sec"], 3),
+                        "par_duration_sec": round(utterance["end_sec"] - utterance["start_sec"], 3)
+                    })
+                    
+                    response_times.append({
+                        "inv_num": prev["inv_num"],
+                        "par_num": utterance["par_num"],
+                        "response_time_sec": round(response_time_sec, 3)
+                    })
+        
+        return response_times, inv_par_pairs
+        
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        import traceback
+        traceback.print_exc()
+        return [], []
+
+
+def save_response_time_data(inv_par_pairs, output_file):
+    """Save response time data to CSV"""
+    if not inv_par_pairs:
+        print("No response time data to save!")
+        return
+    
+    df = pd.DataFrame(inv_par_pairs)
+    df.to_csv(output_file, index=False)
+    print(f"\nResponse time data saved to: {output_file}")
+    
+    # Print summary statistics
+    if "response_time_sec" in df.columns:
+        print(f"\n{'='*100}")
+        print("RESPONSE TIME SUMMARY STATISTICS")
+        print(f"{'='*100}")
+        print(f"Total INV-PAR pairs: {len(df)}")
+        print(f"Mean response time: {df['response_time_sec'].mean():.3f} seconds")
+        print(f"Median response time: {df['response_time_sec'].median():.3f} seconds")
+        print(f"Min response time: {df['response_time_sec'].min():.3f} seconds")
+        print(f"Max response time: {df['response_time_sec'].max():.3f} seconds")
+        print(f"Std dev: {df['response_time_sec'].std():.3f} seconds")
+        print(f"{'='*100}\n")
+        
+        # Show top 10 longest response times
+        print("Top 10 Longest Response Times:")
+        print(df.nlargest(10, 'response_time_sec')[['inv_num', 'par_num', 'response_time_sec']].to_string(index=False))
+
+
 def get_report(file_path):
     # file_path = r"E:\ML\silero-python\Delaware\MCI\01-1.cha"
 
@@ -325,14 +536,21 @@ def get_report(file_path):
                     ].to_string(index=False)
                 )
             
+            # ====== Calculate response time between INV and PAR =======
+            response_times, inv_par_pairs = get_response_time(file_path)
+            
+            if inv_par_pairs:
+                response_time_csv = output_csv.replace(".csv", "_response_time.csv")
+                save_response_time_data(response_times, response_time_csv)
+            
             # ====== returning the silence summary =======
-            return silences, par_silence_summary, word_segments
+            return silences, par_silence_summary, word_segments, response_times
         else:
             print("No PAR utterances with silence found!")
-            return [], [], []
+            return [], [], [], []
     else:
         print("No patient word segments found!")
-        return [], [], []
+        return [], [], [], []
 
 
 if __name__ == "__main__":

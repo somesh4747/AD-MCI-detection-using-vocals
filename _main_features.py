@@ -10,7 +10,7 @@ def extract_features_from_patient(cha_file):
     
     Returns: Dictionary with all computed features
     """
-    silences, get_silence_summary, word_segments = get_report(cha_file)
+    silences, get_silence_summary, word_segments, res_times = get_report(cha_file)
     # Get word segments
     # word_segments = get_report(cha_file)
     # voice_segments = get_patient_voice_segments(cha_file)
@@ -34,6 +34,7 @@ def extract_features_from_patient(cha_file):
     total_pause_times = [i['total_silence_sec'] for i in get_silence_summary]
     # word_segments = [w['word_segment'] for w in silences]
     no_of_silences = [w['num_silences'] for w in get_silence_summary]
+    res_time = [i['response_time_sec'] for i in res_times]
     # Calculate features - OPTIMIZED (removed weak/redundant features)
     # Analysis shows only these features effectively discriminate Control vs MCI:
     
@@ -46,6 +47,9 @@ def extract_features_from_patient(cha_file):
         
         # Pause timing (Cohen's d = 0.316)
         'total_pause_time': round(sum(total_pause_times), 4),
+
+        # response time is added +++++++++++
+        # 'avg_res_time' : round(sum(res_time) / len(res_time), 4),
         
         # Speech rate components (Cohen's d = 0.310)
         'mean_word_duration': round(sum(total_speech_times) / len(word_segments), 4) if word_segments else 0,
@@ -142,10 +146,10 @@ if __name__ == '__main__':
     
     # CSV file with patient diagnoses (you need to create this)
     # Format: patient_id, diagnosis (0=Control, 1=MCI, 2=AD)
-    label_file = r"E:\ML\silero-python\_Control.csv"
+    label_file = r"E:\ML\silero-python\_CONTROL.csv"
     
     # Output training CSV
-    output_csv = r"E:\ML\silero-python\training_dataset___Control.csv"
+    output_csv = r"E:\ML\silero-python\training_C.csv"
     
     # Create training dataset
     df = create_training_dataset(patients_dir, output_csv, label_file)
