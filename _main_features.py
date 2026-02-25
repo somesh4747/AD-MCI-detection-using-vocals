@@ -142,14 +142,14 @@ def create_training_dataset(patients_dir, output_csv, label_file):
 # Example usage
 if __name__ == '__main__':
     # Directory with patient .cha files
-    patients_dir = r"E:\ML\silero-python\Delaware\Control"
+    patients_dir = r"E:\ML\silero-python\Delaware\MCI"
     
     # CSV file with patient diagnoses (you need to create this)
     # Format: patient_id, diagnosis (0=Control, 1=MCI, 2=AD)
-    label_file = r"E:\ML\silero-python\_CONTROL.csv"
+    label_file = r"E:\ML\silero-python\_MCI.csv"
     
     # Output training CSV
-    output_csv = r"E:\ML\silero-python\training_C.csv"
+    output_csv = r"E:\ML\silero-python\training_MM.csv"
     
     # Create training dataset
     df = create_training_dataset(patients_dir, output_csv, label_file)

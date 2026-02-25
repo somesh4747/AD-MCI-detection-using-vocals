@@ -26,9 +26,9 @@ def get_patient_word_segments(file_path):
             if line.startswith("*PAR:"):
                 par_count += 1
                 par_content = line.replace("*PAR:", "").strip()
-                print(
-                    f"\nFound PAR utterance #{par_count} at line {i}: {par_content[:50]}"
-                )
+                # print(
+                #     f"\nFound PAR utterance #{par_count} at line {i}: {par_content[:50]}"
+                # )
 
                 # Look ahead for the %wor: line (may be after %mor: and %gra: lines)
                 j = i + 1
@@ -503,14 +503,14 @@ def get_report(file_path):
             silence_summary_df = pd.DataFrame(par_silence_summary)
             silence_summary_csv = output_csv.replace(".csv", "_par_silence_summary.csv")
             silence_summary_df.to_csv(silence_summary_csv, index=False)
-            print(f"\nPAR-level silence summary saved to: {silence_summary_csv}")
+            # print(f"\nPAR-level silence summary saved to: {silence_summary_csv}")
 
-            print(f"\nTop 10 PAR Utterances by Total Silence:")
-            print(
-                silence_summary_df.sort_values("total_silence_sec", ascending=False)
-                .head(10)
-                .to_string(index=False)
-            )
+            # print(f"\nTop 10 PAR Utterances by Total Silence:")
+            # print(
+            #     silence_summary_df.sort_values("total_silence_sec", ascending=False)
+            #     .head(10)
+            #     .to_string(index=False)
+            # )
 
             total_overall_silence = silence_summary_df["total_silence_sec"].sum()
             total_overall_speech = silence_summary_df["total_speech_sec"].sum()
@@ -524,24 +524,24 @@ def get_report(file_path):
                 silence_df = pd.DataFrame(silences)
                 silence_csv = output_csv.replace(".csv", "_silences_detailed.csv")
                 silence_df.to_csv(silence_csv, index=False)
-                print(f"\nDetailed silence map saved to: {silence_csv}")
+                # print(f"\nDetailed silence map saved to: {silence_csv}")
 
-                print(f"\nTop 10 Longest Individual Silences:")
-                silence_df_sorted = silence_df.sort_values(
-                    "silence_duration_sec", ascending=False
-                )
-                print(
-                    silence_df_sorted.head(10)[
-                        ["par_num", "between_word", "silence_duration_sec"]
-                    ].to_string(index=False)
-                )
+                # print(f"\nTop 10 Longest Individual Silences:")
+                # silence_df_sorted = silence_df.sort_values(
+                #     "silence_duration_sec", ascending=False
+                # )
+                # print(
+                #     silence_df_sorted.head(10)[
+                #         ["par_num", "between_word", "silence_duration_sec"]
+                #     ].to_string(index=False)
+                # )
             
             # ====== Calculate response time between INV and PAR =======
             response_times, inv_par_pairs = get_response_time(file_path)
             
             if inv_par_pairs:
                 response_time_csv = output_csv.replace(".csv", "_response_time.csv")
-                save_response_time_data(response_times, response_time_csv)
+                # save_response_time_data(response_times, response_time_csv)
             
             # ====== returning the silence summary =======
             return silences, par_silence_summary, word_segments, response_times
